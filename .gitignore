@@ -4,3 +4,6 @@ __pycache__/
 *.log
 *.pyc
 *.DS_Store
+
+# ignore third-party stuff
+/3rd/
