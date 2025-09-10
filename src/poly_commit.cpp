@@ -27,129 +27,143 @@ void field_to_int32(vector<unsigned int> &buff, F num1, F num2){
 }
 
 
-void query(int col, int row,  vector<vector<F>> &matrix, commitment mt, aggregation_witness &_data){
-
-    vector<F> aux(4);
+void query(int col, int row,  std::vector<std::vector<F>> &matrix,
+           commitment mt, aggregation_witness &_data)
+{
+    std::vector<F> aux(4);
     __hhash_digest res;
     __hhash_digest data[2];
     F data_f[2];
-    vector<__hhash_digest> _proof;
-    //vector<vector<unsigned int>> proof;
-    vector<vector<unsigned int>> _out;
-    vector<unsigned int> integers(8);
-    vector<F> idx;
+    std::vector<__hhash_digest> _proof;
+    std::vector<std::vector<unsigned int>> _out;
+    std::vector<unsigned int> integers(8);
+    std::vector<F> idx;
     int counter = 1;
-    if(Commitment_hash == SHA || (Commitment_hash == MIMC && mt.hashes_sha.size() != 0)){
-        int offset = col - (col%4);
+
+    if (Commitment_hash == SHA || (Commitment_hash == MIMC && mt.hashes_sha.size() != 0)) {
+        // ----- SHA leaf (4 field elements -> one digest) -----
+        int offset4 = col - (col % 4);
         memset(&res, 0, sizeof(__hhash_digest));
         idx.push_back(F(1));
-        field_to_int32(integers, matrix[row][offset],matrix[row][offset+1]);
 
+        field_to_int32(integers, matrix[row][offset4],     matrix[row][offset4 + 1]);
         _data.merkle_proof.push_back(integers);
-        field_to_int32(integers, matrix[row][offset+2],matrix[row][offset+3]);
+        field_to_int32(integers, matrix[row][offset4 + 2], matrix[row][offset4 + 3]);
         _data.merkle_proof.push_back(integers);
-        res = merkle_tree::hash_double_field_element_merkle_damgard(matrix[row][offset],matrix[row][offset+1],matrix[row][offset+2], matrix[row][offset+3],res);
+
+        res = merkle_tree::hash_double_field_element_merkle_damgard(
+                matrix[row][offset4],     matrix[row][offset4 + 1],
+                matrix[row][offset4 + 2], matrix[row][offset4 + 3], res);
+
         _proof.push_back(res);
         merkle_tree::get_int32(integers, res);
         _out.push_back(integers);
-        if(mt.hashes_sha.size() != 1){
-             _data.merkle_proof.push_back(integers);
-        }
-        int pos = (row*matrix[0].size()/4  + col)/2;
-
-        
-        while(pos != 1){
-            if(counter >= mt.hashes_sha.size()){
-                break;
-            }
-            idx.push_back(F(pos&1));
-            data[pos&1] = res;
-            data[(pos & 1) ^ 1] = mt.hashes_sha[counter][pos ^ 1];
-            _proof.push_back(data[(pos & 1) ^ 1]);
-            merkle_tree::get_int32(integers, data[(pos & 1) ^ 1]);
+        if (mt.hashes_sha.size() != 1) {
             _data.merkle_proof.push_back(integers);
+        }
+
+        // NOTE: keep original SHA pos logic
+        int pos_sha = (row * (int)(matrix[0].size() / 4) + col) / 2;
+
+        while (pos_sha != 1) {
+            if (counter >= (int)mt.hashes_sha.size()) break;
+            const auto &lvl = mt.hashes_sha[counter];
+
+            int sib = (pos_sha ^ 1);
+            int cur = (pos_sha & 1);
+            if (cur >= (int)lvl.size() || sib < 0 || sib >= (int)lvl.size()) break;
+
+            idx.push_back(F(cur));
+            data[cur]       = res;
+            data[cur ^ 1]   = lvl[sib];
+
+            _proof.push_back(data[cur ^ 1]);
+            merkle_tree::get_int32(integers, data[cur ^ 1]);
+            _data.merkle_proof.push_back(integers);
+
             my_hhash(data, &res);
             merkle_tree::get_int32(integers, res);
             _out.push_back(integers);
-            if(counter + 1 < mt.hashes_sha.size()){
+            if (counter + 1 < (int)mt.hashes_sha.size()) {
                 _data.merkle_proof.push_back(integers);
             }
-            pos /= 2;
+            pos_sha /= 2;
             counter++;
         }
-        
-        
-        counter = 0;
-        vector<F> _proof_f;
-        F res_f;
-        /*
-        pos *= 2;
-        if(mt.hashes_f.size() != 0){
-            data_f[pos&1] = mt.hashes_f[counter][pos&1];
-            data_f[(pos & 1) ^ 1] = mt.hashes_f[counter][pos ^ 1];
-            _data.merkle_proof_f.push_back(data_f[pos&1]);
-            _data.merkle_proof_f.push_back(data_f[(pos & 1) ^ 1]);  
-            res_f = my_mimc_hash(data_f[pos&1], data_f[(pos & 1) ^ 1]);
-            _data.merkle_proof_f.push_back(res_f);
 
-        }
-        counter++;
-        pos /= 2;    
-        */
-        //_data.merkle_proof_f.push_back(mt.hashes_f[counter][pos&1]);
-
-        while(pos != 1){
-            if(mt.hashes_f.size() == 0){
-                break;
-            }
-            _data.idx_f.push_back(F(pos&1));
-            data_f[pos&1] = mt.hashes_f[counter][pos&1];
-            data_f[(pos & 1) ^ 1] = mt.hashes_f[counter][pos ^ 1];
-           
-            //_data.merkle_proof_f.push_back(data_f[(pos & 1) ^ 1]);
-            res_f = my_mimc_hash(data_f[pos&1], data_f[(pos & 1) ^ 1],aux);
-            _data.merkle_proof_f.insert(_data.merkle_proof_f.end(),aux.begin(),aux.end());
-            pos /= 2;
-            counter++;
-        }
-        
-        _data.idx.insert(_data.idx.end(),idx.begin(),idx.end());
-        vector<F> hash(8);
-        for(int i = 0; i < _out.size(); i++){
-            for(int j = 0; j < 8; j++){
-                hash[j] = F(_out[i][j]);
-            }
-            _data.output.push_back(hash);
-        } 
-    }else{
-        int offset = col - (col%2);
+        // ----- MiMC/F leaf (2 field elements -> one hash) [NEW + FIXED] -----
+        int offset2 = col - (col % 2);
         _data.idx_f.push_back(F(1));
-        
-        //res = merkle_tree::hash_double_field_element_merkle_damgard(matrix[row][offset],matrix[row][offset+1],matrix[row][offset+2], matrix[row][offset+3],res);
-        vector<F> _proof_f;
-        F res_f;
-        res_f = my_mimc_hash(matrix[row][offset],matrix[row][offset+1],aux); 
-        
-        _data.merkle_proof_f.insert(_data.merkle_proof_f.end(),aux.begin(),aux.end());
-    
-        int pos = (row*matrix.size()  + col)/2;
-        while(pos != 1){
-            
-            _data.idx_f.push_back(F(pos&1));
-            data_f[pos&1] = mt.hashes_f[counter][pos&1];
-            data_f[(pos & 1) ^ 1] = mt.hashes_f[counter][pos ^ 1];
-            _proof_f.push_back(data_f[(pos & 1) ^ 1]);
+        F res_f = my_mimc_hash(matrix[row][offset2], matrix[row][offset2 + 1], aux);
+        _data.merkle_proof_f.insert(_data.merkle_proof_f.end(), aux.begin(), aux.end());
 
-            res_f = my_mimc_hash(data_f[pos&1], data_f[(pos & 1) ^ 1],aux);
-            _data.merkle_proof_f.insert(_data.merkle_proof_f.end(),aux.begin(),aux.end());
+        // Recompute a fresh F-tree position; DO NOT reuse SHA pos
+        int pos_f = (row * (int)matrix.size() + col) / 2;
+        int counter_f = 0;
 
-            pos /= 2;
-            counter++;
+        while (pos_f != 1) {
+            if (mt.hashes_f.empty()) break;
+            if (counter_f >= (int)mt.hashes_f.size()) break;
+
+            const auto &lvl_f = mt.hashes_f[counter_f];
+            int sib = (pos_f ^ 1);
+            int cur = (pos_f & 1);
+            if (cur >= (int)lvl_f.size() || sib < 0 || sib >= (int)lvl_f.size()) break;
+
+            _data.idx_f.push_back(F(cur));
+            // hash "current running hash" with sibling at this level
+            data_f[cur]     = res_f;
+            data_f[cur ^ 1] = lvl_f[sib];
+
+            res_f = my_mimc_hash(data_f[cur], data_f[cur ^ 1], aux);
+            _data.merkle_proof_f.insert(_data.merkle_proof_f.end(), aux.begin(), aux.end());
+
+            pos_f /= 2;
+            counter_f++;
+        }
+
+        // finalize SHA idx/output
+        _data.idx.insert(_data.idx.end(), idx.begin(), idx.end());
+        std::vector<F> hash(8);
+        for (size_t i = 0; i < _out.size(); i++) {
+            for (int j = 0; j < 8; j++) hash[j] = F(_out[i][j]);
+            _data.output.push_back(hash);
+        }
+
+    } else {
+        // ----- Pure MiMC/F branch (no SHA) -----
+        int offset2 = col - (col % 2);
+        _data.idx_f.push_back(F(1));
+
+        std::vector<F> _proof_f;
+        F res_f = my_mimc_hash(matrix[row][offset2], matrix[row][offset2 + 1], aux);
+        _data.merkle_proof_f.insert(_data.merkle_proof_f.end(), aux.begin(), aux.end());
+
+        int pos_f = (row * (int)matrix.size() + col) / 2;
+        int counter_f = 0;
+
+        while (pos_f != 1) {
+            if (mt.hashes_f.empty()) break;
+            if (counter_f >= (int)mt.hashes_f.size()) break;
+
+            const auto &lvl_f = mt.hashes_f[counter_f];
+            int sib = (pos_f ^ 1);
+            int cur = (pos_f & 1);
+            if (cur >= (int)lvl_f.size() || sib < 0 || sib >= (int)lvl_f.size()) break;
+
+            _data.idx_f.push_back(F(cur));
+            // hash running res_f with sibling at this level
+            data_f[cur]     = res_f;
+            data_f[cur ^ 1] = lvl_f[sib];
+
+            res_f = my_mimc_hash(data_f[cur], data_f[cur ^ 1], aux);
+            _data.merkle_proof_f.insert(_data.merkle_proof_f.end(), aux.begin(), aux.end());
+
+            pos_f /= 2;
+            counter_f++;
         }
     }
-   
-   
-}   
+}
 
 void precompute_omegas(int logn){
     w.clear();

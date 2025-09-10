@@ -537,127 +537,119 @@ vector<vector<F>> get_poly(int size){
     return poly;
 }
 
-vector<F> lookup_prod(vector<vector<F>> tables, F num){
-    char buff[256];
-    num = F(0)-num;
-    int n;
-    for(int i = 60; i >= 0; i--){
-        if(num.getBit(i)){
-            n = i;
-            break;
-        }
+std::vector<F> lookup_prod(std::vector<std::vector<F>> tables, F num) {
+    num = F(0) - num;
+
+    // Find MSB position n (or 0 if num==0)
+    int n = 0;
+    bool found = false;
+    for (int i = 60; i >= 0; --i) {
+        if (num.getBit(i)) { n = i; found = true; break; }
     }
-    //int n = num.getStr(buff,256,2);
+    if (!found) n = 0;
+
     int counter = 0;
     int level = 0;
     F prod = F(1);
-    vector<vector<F>> monomials(tables.size());
-    for(int i = 0; i < tables.size(); i++){
-        monomials[i].resize(4);
-        for(int j = 0; j < 4; j++){
-            monomials[i][j] = F(0);
-        }
+
+    // monomials[i][j] tracks selected bits for this table
+    std::vector<std::vector<F>> monomials(tables.size());
+    for (size_t i = 0; i < tables.size(); ++i) {
+        int bits_this_table = (int)std::log2((double)tables[i].size());
+        monomials[i].assign(bits_this_table, F(0));
     }
-    for(int i = 0; i < tables.size(); i++){
+
+    for (size_t i = 0; i < tables.size(); ++i) {
+        int bits_this_table = (int)std::log2((double)tables[i].size());
         int idx = 0;
 
-        for(int j = 0; j < (int)log2(tables[i].size()); j++){
-            if(buff[n - counter - 1] == '1'){
-                idx += 1<<j;
+        for (int j = 0; j < bits_this_table; ++j) {
+            int bitpos = n - counter - 1;
+            if (bitpos >= 0 && num.getBit(bitpos)) {
+                idx += (1 << j);
                 monomials[i][j] = F(1);
             }
-            
-
-            counter+=1;
-            if(counter == n){
-                break;
-            }
-
+            counter += 1;
+            if (counter == n) break;
         }
-        if(counter == n){
-            prod *= tables[i][idx];
-            level = i+1;
-            break;
-        }
-        level = i+1;
+
+        if (idx < 0) idx = 0;
+        if (idx >= (int)tables[i].size()) idx = (int)tables[i].size() - 1;
         prod *= tables[i][idx];
+        level = (int)i + 1;
+        if (counter == n) break;
     }
-    if(level < tables.size()){
-    
-        for(int i = level; i <tables.size(); i++){
+
+    if (level < (int)tables.size()) {
+        for (int i = level; i < (int)tables.size(); ++i) {
             prod *= tables[i][0];
         }
     }
-    vector<F> r;
-    F prod_2 = F(1);
-    for(int i = 0; i < monomials.size(); i++){
-        r.push_back( evaluate_vector(tables[i],monomials[i]));
+
+    // Build per-table evaluations as the function originally returns a vector
+    std::vector<F> r;
+    for (size_t i = 0; i < monomials.size(); ++i) {
+        r.push_back(evaluate_vector(tables[i], monomials[i]));
     }
-
-
     return r;
 }
 
-F lookup(vector<vector<F>> tables, F num){
-    char buff[256];
-    num = F(0)-num;
+F lookup(std::vector<std::vector<F>> tables, F num) {
+    // Use bit API instead of an uninitialized buffer
+    num = F(0) - num;  // keep existing sign flip
 
-    int n;
-    for(int i = 60; i >= 0; i--){
-        if(num.getBit(i)){
-            n = i;
-            break;
-        }
+    // Find MSB position n (or 0 if num==0)
+    int n = 0;
+    bool found = false;
+    for (int i = 60; i >= 0; --i) {
+        if (num.getBit(i)) { n = i; found = true; break; }
     }
-    //int n = num.getStr(buff,256,2);
+    if (!found) n = 0;  // handle num == 0
+
     int counter = 0;
     int level = 0;
     F prod = F(1);
-    vector<vector<F>> monomials(tables.size());
-    for(int i = 0; i < tables.size(); i++){
-        monomials[i].resize(4);
-        for(int j = 0; j < 4; j++){
-            monomials[i][j] = F(0);
-        }
+
+    // monomials[i] has log2(tables[i].size()) entries (==4 when size==16)
+    std::vector<std::vector<F>> monomials(tables.size());
+    for (size_t i = 0; i < tables.size(); ++i) {
+        int bits_this_table = (int)std::log2((double)tables[i].size());
+        monomials[i].assign(bits_this_table, F(0));
     }
-    for(int i = 0; i < tables.size(); i++){
+
+    for (size_t i = 0; i < tables.size(); ++i) {
+        int bits_this_table = (int)std::log2((double)tables[i].size());
         int idx = 0;
 
-        for(int j = 0; j < (int)log2(tables[i].size()); j++){
-            if(buff[n - counter - 1] == '1'){
-                idx += 1<<j;
+        for (int j = 0; j < bits_this_table; ++j) {
+            int bitpos = n - counter - 1;
+            if (bitpos >= 0 && num.getBit(bitpos)) {
+                idx += (1 << j);
                 monomials[i][j] = F(1);
             }
-            
-
-            counter+=1;
-            if(counter == n){
-                break;
-            }
-
+            counter += 1;
+            if (counter == n) break;  // preserve original stop condition
         }
-        if(counter == n){
-            prod *= tables[i][idx];
-            level = i+1;
-            break;
-        }
-        level = i+1;
+
+        // Clamp idx and multiply
+        if (idx < 0) idx = 0;
+        if (idx >= (int)tables[i].size()) idx = (int)tables[i].size() - 1;
         prod *= tables[i][idx];
+        level = (int)i + 1;
+        if (counter == n) break;
     }
-    if(level < tables.size()){
-    
-        for(int i = level; i <tables.size(); i++){
+
+    // Fill remaining levels with the 0-th entry (as original code does)
+    if (level < (int)tables.size()) {
+        for (int i = level; i < (int)tables.size(); ++i) {
             prod *= tables[i][0];
         }
     }
 
-    F prod_2 = F(1);
-    for(int i = 0; i < monomials.size(); i++){
-        prod_2 *= evaluate_vector(tables[i],monomials[i]);
-    }
-
-   
-    //printf("%s\n",buff );
+    // Original computes prod_2 but returns prod; keep behavior
+    // F prod_2 = F(1);
+    // for (size_t i = 0; i < monomials.size(); ++i)
+    //     prod_2 *= evaluate_vector(tables[i], monomials[i]);
 
     return prod;
 }

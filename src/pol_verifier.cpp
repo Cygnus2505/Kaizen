@@ -62,26 +62,31 @@ vector<F> encode_gkr_proof(struct proof P){
 	return data;
 }
 
-vector<int> get_gkr_transcript(struct proof P){
-	int arr[1 + P.randomness.size() + P.sig.size()];
-	arr[0] = GKR_PROOF;
-	arr[1] = P.randomness.size()-1;
-	int counter = 2;
-	for(int i = 1; i < P.randomness.size(); i++){
-		arr[counter] = P.randomness[i].size();
-		counter +=1;
-	}
-	for(int i = 0; i < P.sig.size(); i++){
-		arr[counter] = P.sig[i].size();
-		counter+=1;
-	}
+std::vector<int> get_gkr_transcript(const proof& P) {
+    std::vector<int> tr;
+    // Layout: [TYPE, levels, |rand[1]|, |rand[2]|, ..., |sig[0]|, |sig[1]|, ...]
+    const size_t extra_rand = (P.randomness.size() > 1) ? (P.randomness.size() - 1) : 0;
+    tr.reserve(2 + extra_rand + P.sig.size());
 
-	vector<int> tr;
-	for(int i = 0; i < 1 + P.randomness.size() + P.sig.size(); i++){
-		tr.push_back(arr[i]);
-	}
+    // Type tag
+    tr.push_back(GKR_PROOF);
 
-	return tr;
+    // levels = max(|randomness|-1, 0)  (avoid negative when randomness is empty)
+    int levels = static_cast<int>(P.randomness.size());
+    levels = (levels > 0) ? (levels - 1) : 0;
+    tr.push_back(levels);
+
+    // Sizes of randomness vectors starting from index 1
+    for (size_t i = 1; i < P.randomness.size(); ++i) {
+        tr.push_back(static_cast<int>(P.randomness[i].size()));
+    }
+
+    // Sizes of signature vectors
+    for (size_t i = 0; i < P.sig.size(); ++i) {
+        tr.push_back(static_cast<int>(P.sig[i].size()));
+    }
+
+    return tr;
 }
 
 int m2m_size(struct proof P){
@@ -96,32 +101,25 @@ int m2m_size(struct proof P){
 }
 
 
-vector<F> encode_m2m_proof(struct proof P){
-	vector<F> data;
-	for(int i = 0; i < P.q_poly.size(); i++){
-		data.push_back(P.q_poly[i].a);
-		data.push_back(P.q_poly[i].b);
-		data.push_back(P.q_poly[i].c);	
-	}
-	for(int i = 0; i < P.randomness[0].size(); i++){
-		data.push_back(P.randomness[0][i]);
-	}
+std::vector<F> encode_m2m_proof(struct proof P){
+    std::vector<F> data;
+    data.reserve(3 * P.q_poly.size()
+                 + (P.randomness.empty() ? 0 : (int)P.randomness[0].size())
+                 + 3);
 
-	/*
-	for(int i = 0; i < P.w_hashes.size(); i++){
-		for(int j = 0; j < P.w_hashes[i].size(); j++){
-			for(int k = 0; k < P.w_hashes[i][j].size(); k++){
-				data.push_back(P.w_hashes[i][j][k]);
-			}
-		}
-	}
-	*/
-	
-	data.push_back(P.vr[0]);
-	data.push_back(P.vr[1]);
-	data.push_back(P.q_poly[0].eval(0) + P.q_poly[0].eval(1));
-
-	return data;
+    for (int i = 0; i < P.q_poly.size(); ++i){
+        data.push_back(P.q_poly[i].a);
+        data.push_back(P.q_poly[i].b);
+        data.push_back(P.q_poly[i].c);
+    }
+    if (!P.randomness.empty()){
+        for (int i = 0; i < P.randomness[0].size(); ++i)
+            data.push_back(P.randomness[0][i]);
+    }
+    data.push_back(P.vr[0]);
+    data.push_back(P.vr[1]);
+    data.push_back(P.q_poly[0].eval(0) + P.q_poly[0].eval(1));
+    return data;
 }
 
 vector<F> encode_hash_proof(proof P){
@@ -143,140 +141,111 @@ vector<F> encode_hash_proof(proof P){
 	return data;
 }
 
-vector<F> encode_lookup_proof(layer_proof P){
-	vector<F> data;
-	for(int i = 0; i < P.c_poly.size(); i++){
-		data.push_back(P.c_poly[i].a);
-		data.push_back(P.c_poly[i].b);
-		data.push_back(P.c_poly[i].c);	
-		data.push_back(P.c_poly[i].d);	
-	}
-	for(int i = 0; i < P.randomness[0].size(); i++){
-		data.push_back(P.randomness[0][i]);
-	}
-	/*
-	for(int i = 0; i < P.w_hashes.size(); i++){
-		for(int j = 0; j < P.w_hashes[i].size(); j++){
-			for(int k = 0; k < P.w_hashes[i][j].size(); k++){
-				data.push_back(P.w_hashes[i][j][k]);
-			}
-		}
-	}
-	*/
-	
-	data.push_back(P.vr[0]);
-	data.push_back(P.vr[1]);
-	data.push_back(P.q_poly[0].eval(0) + P.q_poly[0].eval(1));
+std::vector<F> encode_lookup_proof(layer_proof P){
+    std::vector<F> data;
+    data.reserve(4 * P.c_poly.size()
+                 + (P.randomness.empty() ? 0 : (int)P.randomness[0].size())
+                 + 3);
 
-	return data;
-}
-
-vector<int> get_hash_transcript(struct proof P){
-	int arr[2];
-	arr[0] = HASH_SUMCHECK;
-	arr[1] = P.randomness[0].size();
-	
-	vector<int> tr;
-	for(int i = 0; i < 2; i++){
-		tr.push_back(arr[i]);
-	}
-
-	return tr;
-}
-
-vector<int> get_m2m_transcript(struct proof P){
-	int arr[2];
-	arr[0] = MATMUL_PROOF;
-	arr[1] = P.randomness[0].size();
-	
-	vector<int> tr;
-	for(int i = 0; i < 2; i++){
-		tr.push_back(arr[i]);
-	}
-
-	return tr;
-}
-
-vector<int> get_lookup_transcript(layer_proof P){
-	int arr[2];
-	arr[0] = LOOKUP_PROOF;
-	arr[1] = P.randomness[0].size();
-	
-	vector<int> tr;
-	for(int i = 0; i < 2; i++){
-		tr.push_back(arr[i]);
-	}
-
-	return tr;
+    for (int i = 0; i < P.c_poly.size(); ++i){
+        data.push_back(P.c_poly[i].a);
+        data.push_back(P.c_poly[i].b);
+        data.push_back(P.c_poly[i].c);
+        data.push_back(P.c_poly[i].d);
+    }
+    if (!P.randomness.empty()){
+        for (int i = 0; i < P.randomness[0].size(); ++i)
+            data.push_back(P.randomness[0][i]);
+    }
+    data.push_back(P.vr[0]);
+    data.push_back(P.vr[1]);
+    data.push_back(P.q_poly[0].eval(0) + P.q_poly[0].eval(1));
+    return data;
 }
 
 
-int bit_decomposition_size(struct proof P){
-	int size = 0;
-	for(int i = 0; i < P.q_poly.size(); i++){
-		size+=3;
-	}
-	for(int i = 0; i < P.c_poly.size(); i++){
-		size+=4;
-	}
-	for(int i = 0; i < P.randomness[2].size(); i++){
-		size++;
-	}
-	for(int i = 0; i < P.randomness[3].size(); i++){
-		size++;
-	}
-	size++;
-	if(P.type == RANGE_PROOF_OPT){
-		
-	}
-	return size*32;
+std::vector<int> get_hash_transcript(struct proof P) {
+    std::vector<int> tr;
+    tr.reserve(2);
+    tr.push_back(HASH_SUMCHECK);
+    int r0 = (!P.randomness.empty()) ? (int)P.randomness[0].size() : 0;
+    tr.push_back(r0);
+    return tr;
 }
 
-vector<F> encode_bit_decomposition(struct proof P){
-	vector<F> data;
-	for(int i = 0; i < P.q_poly.size(); i++){
-		data.push_back(P.q_poly[i].a);
-		data.push_back(P.q_poly[i].b);
-		data.push_back(P.q_poly[i].c);	
-	}
-	for(int i = 0; i < P.c_poly.size(); i++){
-		data.push_back(P.c_poly[i].a);
-		data.push_back(P.c_poly[i].b);
-		data.push_back(P.c_poly[i].c);	
-		data.push_back(P.c_poly[i].d);	
-	}
-	for(int i = 0; i < P.randomness[2].size(); i++){
-		data.push_back(P.randomness[2][i]);
-	}
-	for(int i = 0; i < P.randomness[3].size(); i++){
-		data.push_back(P.randomness[3][i]);
-	}
+std::vector<int> get_m2m_transcript(struct proof P) {
+    std::vector<int> tr;
+    tr.reserve(2);
+    tr.push_back(MATMUL_PROOF);
+    int r0 = (!P.randomness.empty()) ? (int)P.randomness[0].size() : 0;
+    tr.push_back(r0);
+    return tr;
+}
 
-	/*
-	for(int i = 0; i < P.q_poly.size(); i++){
-		for(int j = 0; j < P.w_hashes[i].size(); j++){
-			for(int k = 0; k < P.w_hashes[i][j].size(); k++){
-				data.push_back(P.w_hashes[i][j][k]);
-			}
-		}
-	}
-	for(int i = P.q_poly.size(); i < P.w_hashes.size(); i++){
-		for(int j = 0; j < P.w_hashes[i].size(); j++){
-			for(int k = 0; k < P.w_hashes[i][j].size(); k++){
-				data.push_back(P.w_hashes[i][j][k]);
-			}
-		}
-	}
-	*/
-	
+std::vector<int> get_lookup_transcript(layer_proof P) {
+    std::vector<int> tr;
+    tr.reserve(2);
+    tr.push_back(LOOKUP_PROOF);
+    int r0 = (!P.randomness.empty()) ? (int)P.randomness[0].size() : 0;
+    tr.push_back(r0);
+    return tr;
+}
 
-	data.push_back(P.vr[0]);
-	data.push_back(P.vr[1]);
-	data.push_back(P.vr[2]);
-	data.push_back(F(1) - P.vr[2]);
-	data.push_back(P.vr[3]);
-	data.push_back(P.q_poly[0].eval(0) + P.q_poly[0].eval(1));
-	return data;
+
+int bit_decomposition_size(const proof& P){
+    int size = 0;
+    size += 3 * static_cast<int>(P.q_poly.size());
+    size += 4 * static_cast<int>(P.c_poly.size());
+
+    int r2 = (P.randomness.size() > 2) ? static_cast<int>(P.randomness[2].size()) : 0;
+    int r3 = (P.randomness.size() > 3) ? static_cast<int>(P.randomness[3].size()) : 0;
+    size += r2 + r3;
+
+    size += 1; // keep existing logic
+    if (P.type == RANGE_PROOF_OPT) {
+        // (left empty in your code; keep behavior)
+    }
+    return size * 32;
+}
+
+std::vector<F> encode_bit_decomposition(const proof& P){
+    std::vector<F> data;
+
+    for (int i = 0; i < P.q_poly.size(); ++i){
+        data.push_back(P.q_poly[i].a);
+        data.push_back(P.q_poly[i].b);
+        data.push_back(P.q_poly[i].c);
+    }
+    for (int i = 0; i < P.c_poly.size(); ++i){
+        data.push_back(P.c_poly[i].a);
+        data.push_back(P.c_poly[i].b);
+        data.push_back(P.c_poly[i].c);
+        data.push_back(P.c_poly[i].d);
+    }
+
+    if (P.randomness.size() > 2){
+        for (int i = 0; i < P.randomness[2].size(); ++i)
+            data.push_back(P.randomness[2][i]);
+    }
+    if (P.randomness.size() > 3){
+        for (int i = 0; i < P.randomness[3].size(); ++i)
+            data.push_back(P.randomness[3][i]);
+    }
+
+    auto vr_at = [&](size_t idx)->F {
+        return (P.vr.size() > idx) ? P.vr[idx] : F(0);
+    };
+
+    data.push_back(vr_at(0));
+    data.push_back(vr_at(1));
+    data.push_back(vr_at(2));
+    data.push_back(F(1) - vr_at(2));
+    data.push_back(vr_at(3));
+
+    F q0 = (P.q_poly.size() > 0) ? (P.q_poly[0].eval(0) + P.q_poly[0].eval(1)) : F(0);
+    data.push_back(q0);
+
+    return data;
 }
 
 vector<int> get_range_proof_transcript(struct proof P){
@@ -478,63 +447,81 @@ void verify_bit_decomposition(struct proof Pr){
 	}
 }
 
-void write_transcript(vector<vector<int>> tr, char *name){
-	
-	FILE *f;
-	f = fopen(name,"w+");
-   	
-	for(int i = 0; i < tr.size(); i++){
-		for(int j = 0; j < tr[i].size(); j++){
-			fprintf(f, "%d ",tr[i][j]);
-		}
-		fprintf(f, "\n");
-	}
+void write_transcript(const std::vector<std::vector<int>>& tr, const char* name) {
+    if (name == nullptr) {
+        fprintf(stderr, "write_transcript: name is null\n");
+        return;
+    }
 
-	fprintf(f, "\n");
-	fclose(f);
+    FILE* f = fopen(name, "w+");
+    if (!f) {
+        perror("write_transcript: fopen");
+        fprintf(stderr, "  path: %s\n", name);
+        return;
+    }
 
+    for (size_t i = 0; i < tr.size(); ++i) {
+        for (size_t j = 0; j < tr[i].size(); ++j) {
+            if (fprintf(f, "%d ", tr[i][j]) < 0) {
+                perror("write_transcript: fprintf");
+                fclose(f);
+                return;
+            }
+        }
+        if (fprintf(f, "\n") < 0) {
+            perror("write_transcript: fprintf newline");
+            fclose(f);
+            return;
+        }
+    }
+
+    fprintf(f, "\n");
+    fclose(f);
 }
 
-void write_proof_data(vector<vector<F>> data, char *name){
-	char buff[256];
-	int counter = 0;
-	FILE *f;
-	f = fopen(name,"w+");
-	for(int i = 0; i < data.size(); i++){
-		for(int j = 0; j < data[i].size(); j++){
-			//data[i][j].getStr(buff,257,10);
-			counter += 1;
-			fprintf(f, "%s\n",data[i][j].toString());
-		}
-	}
-	F one = F(1);
-	counter += 1;
-	//one.getStr(buff,257,10);
-	one.toString();
-	fprintf(f, "%s\n",buff);
-	printf("%d\n",counter );
-	fclose(f);
+void write_proof_data(const std::vector<std::vector<F>>& data, const char* name) {
+    if (!name) { fprintf(stderr, "write_proof_data: name is null\n"); return; }
+    FILE* f = fopen(name, "w");
+    if (!f) { perror("write_proof_data: fopen"); fprintf(stderr, "  path: %s\n", name); return; }
+
+    size_t counter = 0;
+    for (size_t i = 0; i < data.size(); ++i) {
+        for (size_t j = 0; j < data[i].size(); ++j) {
+            std::string s = data[i][j].toString();  // copy to avoid reused static buffer
+            if (fprintf(f, "%s\n", s.c_str()) < 0) { perror("write_proof_data: fprintf"); fclose(f); return; }
+            ++counter;
+        }
+    }
+
+    std::string one = F(1).toString();
+    if (fprintf(f, "%s\n", one.c_str()) < 0) { perror("write_proof_data: fprintf tail"); fclose(f); return; }
+    ++counter;
+
+    // Optional debug: fprintf(stderr, "%zu\n", counter);
+    fclose(f);
 }
 
-void write_proof_data_hashes(vector<vector<F>> data, char *name){
-	char buff[256];
-	int counter = 0;
-	FILE *f;
-	f = fopen(name,"w+");
-	for(int i = 0; i < data.size(); i++){
-		for(int j = 0; j < data[i].size(); j++){
-			//data[i][j].getStr(buff,257,10);
-			counter += 1;
-			fprintf(f, "%s\n",data[i][j].toString());
-		}
-	}
-	F one = F(0);
-	counter += 1;
-	one.toString();
-	//one.getStr(buff,257,10);
-	fprintf(f, "%s\n",buff);
-	printf("%d\n",counter );
-	fclose(f);
+// Safer write_proof_data_hashes: prints all field elements, then a trailing "0"
+void write_proof_data_hashes(const std::vector<std::vector<F>>& data, const char* name) {
+    if (!name) { fprintf(stderr, "write_proof_data_hashes: name is null\n"); return; }
+    FILE* f = fopen(name, "w");
+    if (!f) { perror("write_proof_data_hashes: fopen"); fprintf(stderr, "  path: %s\n", name); return; }
+
+    size_t counter = 0;
+    for (size_t i = 0; i < data.size(); ++i) {
+        for (size_t j = 0; j < data[i].size(); ++j) {
+            std::string s = data[i][j].toString();
+            if (fprintf(f, "%s\n", s.c_str()) < 0) { perror("write_proof_data_hashes: fprintf"); fclose(f); return; }
+            ++counter;
+        }
+    }
+
+    std::string zero = F(0).toString();
+    if (fprintf(f, "%s\n", zero.c_str()) < 0) { perror("write_proof_data_hashes: fprintf tail"); fclose(f); return; }
+    ++counter;
+
+    // Optional debug: fprintf(stderr, "%zu\n", counter);
+    fclose(f);
 }
 
 

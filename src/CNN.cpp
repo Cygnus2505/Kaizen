@@ -8,6 +8,7 @@
 #define TEST 3
 #define AlexNet 4
 #define mAlexNet 5
+#define LINEAR_NET  6
 
 
 extern unsigned long int mul_counter;
@@ -670,12 +671,14 @@ struct convolution_layer conv(vector<vector<vector<vector<F>>>> input,vector<vec
 
 
 struct convolutional_network init_network(int selected_model,int batch_size,int channels){
+	
 	model = selected_model;
 	batch = batch_size;
 	grad_divide = F(1<<Q)*quantize(batch);
 	e = quantize(0.01);
 	struct convolutional_network net;
 	if(model == LENET){
+		
 		printf("Lenet : %d \n",channels);
 		net.Filters = add_filter(net.Filters,4,channels,5); // 28
 		net.convolution_pooling.push_back(1);
@@ -699,6 +702,7 @@ struct convolutional_network init_network(int selected_model,int batch_size,int 
 		net.Weights = add_dense(net.Weights,128,32);
 		net.Weights = add_dense(net.Weights,32,16);
 	}else if(model == VGG){
+		
 		//62
 		//60
 		//28
@@ -752,7 +756,42 @@ struct convolutional_network init_network(int selected_model,int batch_size,int 
 	
 	
 	
-	}else if(model == TEST){
+	}
+	else if (model == LINEAR_NET) {
+		
+    struct convolutional_network net;
+
+    // Same conv stack as your LENET branch
+    net.Filters = add_filter(net.Filters, 4,  channels, 5); // “28”
+    net.convolution_pooling.push_back(1);
+    net.Filters = add_filter(net.Filters, 16, 4,        5); // “10”
+    net.convolution_pooling.push_back(1);
+    net.Filters = add_filter(net.Filters, 128,16,       5); // “1”
+    net.convolution_pooling.push_back(0);
+
+    net.Rotated_Filters.resize(net.Filters.size());
+    for (int i = 0; i < net.Filters.size(); i++) {
+        net.Rotated_Filters[i].resize(net.Filters[i].size());
+        for (int j = 0; j < net.Filters[i].size(); j++) {
+            net.Rotated_Filters[i][j].resize(net.Filters[i][j].size());
+            for (int k = 0; k < net.Filters[i][j].size(); k++) {
+                net.Rotated_Filters[i][j][k] = rotate(net.Filters[i][j][k]);
+            }
+        }
+    }
+
+    net.final_out = 128;
+    net.final_w   = 1;
+
+    // Dense layers mirror LENET
+    net.Weights = add_dense(net.Weights, 128, 32);
+    net.Weights = add_dense(net.Weights,  32, 16);
+
+    // NOTE: we are NOT adding ReLU layers here.
+    return net;
+	}
+	else if(model == TEST){
+		
 		net.Filters = add_filter(net.Filters,4,channels,5);
 		net.convolution_pooling.push_back(1); //14
 		net.Filters = add_filter(net.Filters,16,4,5);
@@ -779,6 +818,7 @@ struct convolutional_network init_network(int selected_model,int batch_size,int 
 		net.Weights = add_dense(net.Weights,32,16);
 	}
 	else if(model == mAlexNet){
+		
 		/*
 		net.Filters = add_filter(net.Filters,32,channels,7); // 56
 		net.convolution_pooling.push_back(1);
@@ -835,6 +875,7 @@ struct convolutional_network init_network(int selected_model,int batch_size,int 
 		net.Weights = add_dense(net.Weights,512,16);
 	}
 	else{
+		
 		net.Filters = add_filter(net.Filters,32,channels,7); // 56
 		net.convolution_pooling.push_back(1);
 		net.Filters = add_filter(net.Filters,32,32,5); // 28 -> 24
@@ -932,13 +973,17 @@ struct convolutional_network feed_forward(vector<vector<vector<vector<F>>>> &X, 
 			conv_data.idx = i;
 			net.convolutions.push_back(conv_data);
 			//printf("Conv.Out dim: %d,%d,%d \n", conv_data.Out.size(),conv_data.Out[0].size(),conv_data.n*conv_data.n);
+			if(model != LINEAR_NET){
 			relu_data = _relu_layer(convert2vector(conv_data.Out));
 			
 			net.relus.push_back(relu_data);
 			
 			
 			avg_data = avg(relu_data.output, conv_data.chout,conv_data.n - conv_data.w + 1, conv_data.n, conv_data.window,net.convolution_pooling[i]);
-			
+		}
+			else{
+				avg_data = avg(convert2vector(conv_data.Out),conv_data.chout,conv_data.n - conv_data.w + 1, conv_data.n, conv_data.window,net.convolution_pooling[i]);
+			}
 			net.avg_layers.push_back(avg_data);
 			Z_conv = organize_data(avg_data.Out,net.Filters[i].size(),avg_data.padded_w);
 			//printf("New Input dim : %d,%d,%d,%d\n", Z_conv.size(),Z_conv[0].size(),Z_conv[0][0].size(),Z_conv[0][0][0].size());
@@ -979,7 +1024,7 @@ struct convolutional_network feed_forward(vector<vector<vector<vector<F>>>> &X, 
 					}
 				}
 			}
-
+			if(model != LINEAR_NET){
 			//printf(">>> %d,%d,%d, Padded : %d \n", Z.size(),Z[0].size(), conv_data.n*conv_data.n*conv_data.chout,avg_data.padded_w);
 			relu_data = _relu_layer(convert2vector(Z));// convert2vector(avg_data.Out));
 			//exit(-1);
@@ -991,15 +1036,27 @@ struct convolutional_network feed_forward(vector<vector<vector<vector<F>>>> &X, 
 				}
 			}
 		}
+	}
 		else{
 			conv_data = conv(Z_conv,real_input,net.Filters[i],true);
 			conv_data.idx = i;
 			net.convolutions.push_back(conv_data);
+			if(model != LINEAR_NET){
 			relu_data = _relu_layer(convert2vector(conv_data.Out));
 			//printf(">>> %d,%d,%d \n", conv_data.Out.size(),conv_data.Out[0].size(),conv_data.n*conv_data.n);
 			//check_relu(real_input);
 			net.relus.push_back(relu_data);
 			avg_data = avg(relu_data.output, conv_data.chout,conv_data.n - conv_data.w + 1, conv_data.n, conv_data.window,net.convolution_pooling[i]);
+			}
+			else{
+				 avg_data = avg(convert2vector(conv_data.Out),
+                               conv_data.chout,
+                               conv_data.n - conv_data.w + 1,
+                               conv_data.n,
+                               conv_data.window,
+                               net.convolution_pooling[i]);
+
+			}
 			net.avg_layers.push_back(avg_data);
 		
 			Z_conv = organize_data(avg_data.Out,net.Filters[i].size(),avg_data.padded_w);
@@ -1020,9 +1077,14 @@ struct convolutional_network feed_forward(vector<vector<vector<vector<F>>>> &X, 
 		mlp_data = _fully_connected_layer(Z, net.Weights[i]);
 		net.fully_connected.push_back(mlp_data);
 		if(i < net.Weights.size()-1){
+			if(model != LINEAR_NET){
 			relu_data = _relu_layer(convert2vector(mlp_data.Z_new));
 			Z = convert2matrix(relu_data.output,mlp_data.Z_new.size(),mlp_data.Z_new[0].size());
 			net.relus.push_back(relu_data);
+		}
+		else{
+			Z = mlp_data.Z_new;
+		}
 		}
 		//printf("(%d,%d),(%d,%d),(%d,%d)\n",net.Weights[i].size(),net.Weights[i][0].size(), mlp_data.Z_prev.size(),mlp_data.Z_prev[0].size(),mlp_data.Z_new.size(),mlp_data.Z_new[0].size());
 	}
@@ -1550,8 +1612,11 @@ struct convolutional_network back_propagation( struct convolutional_network net)
 	}
 
 	for(int i = net.Weights.size()-1; i >= 0; i--){
+		
 		dense_der = dense_backprop(out_der,net.fully_connected[i]);
+		
 		net.fully_connected_backprop.push_back(dense_der);
+		if (model != LINEAR_NET && !net.relus.empty() && relu_counter >= 0) {
 		vector<F> v = convert2vector(out_der);
 		relu_der = relu_backprop(v,net.relus[relu_counter]);
 		for(int j = 0; j < out_der.size(); j++){
@@ -1562,6 +1627,7 @@ struct convolutional_network back_propagation( struct convolutional_network net)
 		net.relus_backprop.push_back(relu_der);
 		in_size = net.Weights[i][0].size();
 		relu_counter--;
+	}
 	}
 
 	int last_conv = net.Filters.size()-1;
@@ -1616,7 +1682,8 @@ struct convolutional_network back_propagation( struct convolutional_network net)
 			
 			int w = der[0][0].size();
 			net.der_dim.push_back(der.size()*der[0].size()*w*w);
-			if(der.size()*der[0].size()*w*w != net.relus[relu_counter].most_significant_bits.size()){
+			if(model != LINEAR_NET && !net.relus.empty() && relu_counter >= 0 &&
+der.size()*der[0].size()*w*w != net.relus[relu_counter].most_significant_bits.size()){
 				vector<vector<vector<vector<F>>>> temp(der.size());
 				net.der.push_back(der);
 
@@ -1636,6 +1703,8 @@ struct convolutional_network back_propagation( struct convolutional_network net)
 				}
 				der = temp;
 			}
+			if (model != LINEAR_NET && !net.relus.empty() && relu_counter >= 0) {
+
 
 			vector<F> v = tensor2vector(der);
 			relu_der = relu_backprop(v,net.relus[relu_counter]);
@@ -1657,6 +1726,7 @@ struct convolutional_network back_propagation( struct convolutional_network net)
 			net.relus_backprop.push_back(relu_der);
 			//printf("Relu %d, pos : %d \n",i,net.relus_backprop.size());
 			relu_counter--;
+			}
 			
 		}
 	}

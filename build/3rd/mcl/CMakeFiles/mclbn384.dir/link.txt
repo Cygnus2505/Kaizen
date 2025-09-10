@@ -1,0 +1,1 @@
+/usr/bin/c++ -fPIC -w -march=native -faligned-new -mavx -lgmp -msha -g -shared -Wl,-soname,libmclbn384.so.1 -o ../../lib/libmclbn384.so.1.73 CMakeFiles/mclbn384.dir/src/bn_c384.cpp.o   -L/home/harsh/kaizen/3rd/mcl  -L/home/harsh/kaizen/lib  -Wl,-rpath,/home/harsh/kaizen/3rd/mcl:/home/harsh/kaizen/lib:/home/harsh/kaizen/build/lib: ../../lib/libmcl.so.1.73 

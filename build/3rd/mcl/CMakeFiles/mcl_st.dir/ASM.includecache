@@ -1,0 +1,12 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/home/harsh/kaizen/3rd/mcl/src/asm/bint-x64-amd64.s
+
+/home/harsh/kaizen/3rd/mcl/src/asm/x86-64.s
+

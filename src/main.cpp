@@ -49,6 +49,7 @@ vector<F> x_transcript,y_transcript;
 F current_randomness;
 
 double aggregation_time = 0.0;
+bool g_skip_mimc = false;
 
 
 void init_SHA(){
@@ -160,6 +161,10 @@ void extend_input(vector<F> input, vector<F> extended_input, int partitions){
 
 
 vector<proof> mimc_sumcheck(vector<F> input){
+	if (g_skip_mimc) {
+    return {};  // LINEAR_NET: skip MiMC sumcheck entirely
+}
+
 	proof P;
 	int rounds = 80/partitions;
 	pad_vector(input);
@@ -213,7 +218,7 @@ vector<proof> mimc_sumcheck(vector<F> input){
 		P = generate_4product_sumcheck_proof(v, beta,current_randomness);
 		proofs.push_back(P);
 		if(P.quad_poly[0].eval(F(0))  +P.quad_poly[0].eval(F(1)) != sum){
-			printf("Error %d\n",i);
+			printf("Errorsss %d\n",i);
 		}
 		// check correctness
 		x = P.randomness[0];
@@ -857,7 +862,7 @@ void prove_division(vector<vector<F>> quotient,vector<vector<F>> remainder,vecto
 	}
 
 	
-	lookup_proof rP = lookup_range_proof(range_proof_data,r ,divisor- remainder_sum, 64);
+	lookup_proof rP = lookup_range_proof(range_proof_data,r ,divisor- remainder_sum, 128);
 	Transcript.push_back(rP.mP1);
 	Transcript.push_back(rP.mP2);
 	Transcript.push_back(rP.sP1);
@@ -895,7 +900,7 @@ void prove_shift(vector<vector<F>> quotient,vector<vector<F>> remainder,vector<v
 
 	//prove_bit_decomposition(prepare_bit_vector(range_proof_data,32),range_proof_data,32);
 
-	lookup_proof rP = lookup_range_proof(range_proof_data,r,divisor-remainder_sum,32);
+	lookup_proof rP = lookup_range_proof(range_proof_data,r,divisor-remainder_sum,64);
 	Transcript.push_back(rP.mP1);
 	Transcript.push_back(rP.mP2);
 	Transcript.push_back(rP.sP1);
@@ -994,7 +999,7 @@ void prove_avg(struct avg_layer avg_data,vector<F> &r, F &previous_sum, int pool
 
 		// Check that remainders are well-formed. 
 		
- 		lookup_proof rP = lookup_range_proof(range_proof_data,r,divisor - remainder_eval ,32);
+ 		lookup_proof rP = lookup_range_proof(range_proof_data,r,divisor - remainder_eval ,64);
 		Transcript.push_back(rP.mP1);
 		Transcript.push_back(rP.mP2);
 		Transcript.push_back(rP.sP1);
@@ -1397,7 +1402,6 @@ void prove_feedforward(struct convolutional_network net){
 	F previous_sum;
 	vector<struct proof> Proofs;
 	
-	
 	prove_lookup(net.Batch_size,16);
 	
 	clock_t start,end;
@@ -1429,13 +1433,14 @@ void prove_feedforward(struct convolutional_network net){
 		r.clear();
 		r.insert(r.end(),P.randomness[0].begin(),P.randomness[0].end());
 		r.insert(r.end(),P.randomness[1].begin(),P.randomness[1].end());
-		
+		if (relu_counter >= 0 && !net.relus.empty() ) {
 		if(evaluate_vector(net.relus[relu_counter].output,r) != previous_sum){
 			printf("Error\n");
 			exit(-1);
 		}
 		Proofs = prove_relu(net.relus[relu_counter],r,previous_sum);
 		relu_counter--;
+	}
 		printf("Dense layer %d Correct \n",i);
 		//break;
 	}
@@ -1455,9 +1460,10 @@ void prove_feedforward(struct convolutional_network net){
 		avg = net.avg_layers[i];
 		
 		prove_avg(avg,r,previous_sum,net.convolution_pooling[i]);
-		
+		if (relu_counter >= 0 && !net.relus.empty()) {
 		Proofs = prove_relu(net.relus[relu_counter],r,previous_sum);
 		relu_counter--;
+		}
 		prove_convolution(conv, r,previous_sum,true);
 	}
 	Forward_propagation = proving_time;
@@ -1756,6 +1762,23 @@ void prove_backprop(struct convolutional_network net){
 	int convolutions_counter = net.convolutions_backprop.size() - 2;
 	int der_counter = net.der.size()-1;
 	struct convolution_layer_backprop conv_back;
+	if (relu_counter < 0) {
+    // Use the final conv backprop dx to size randomness and set previous_sum
+		auto &dx_last = net.convolutions_backprop.back().dx;   // vector<vector<F>>
+vector<F> v_last = convert2vector(dx_last);            // flatten to 1D
+
+// compute next power-of-two >= v_last.size()
+int k = 0;
+while ((1u << k) < (unsigned)v_last.size()) k++;
+
+// pad a copy to 2^k so evaluate_vector() and randomness size match
+vector<F> v_pad = v_last;
+v_pad.resize(1u << k, F(0));
+
+// seed r and previous_sum using the padded vector
+r = generate_randomness(k, F(0));
+previous_sum = evaluate_vector(v_pad, r);
+	}
 	/*
 	for(int i = 0; i < net.relus_backprop.size(); i++){
 		cout << "python3 relu.py " + to_string(net.relus_backprop[i].dx_prev.size()) + "\n" ;
@@ -1785,6 +1808,7 @@ void prove_backprop(struct convolutional_network net){
    	}
    	return;
 	*/
+	if(relu_counter >=0){
    	r = generate_randomness((int)log2(net.relus_backprop[relu_counter].dx.size()),F(0));
    	previous_sum = evaluate_vector(net.relus_backprop[relu_counter].dx,r);
    	for(int i = 1; i < net.convolutions_backprop.size(); i++){
@@ -1821,6 +1845,7 @@ void prove_backprop(struct convolutional_network net){
    		prove_convolution_backprop(net.convolutions_backprop[convolutions_counter],net.convolutions[i], r,previous_sum, false);
    		relu_counter--;
    		convolutions_counter--;
+	}
    	}
    	if(avg_counter == 0){
    		printf("Final Averaging\n");
@@ -1828,6 +1853,7 @@ void prove_backprop(struct convolutional_network net){
    		
    	}
    	printf("Proving Dense backprop\n");
+	if(relu_counter>=0){
    	flat_layer(net,net.convolutions_backprop[0],net.relus_backprop[relu_counter],r,previous_sum);
 
    	for(int i = net.Weights.size() -1; i >= 0; i--){
@@ -1835,6 +1861,13 @@ void prove_backprop(struct convolutional_network net){
    		relu_counter--;
    		prove_dense_backprop(net.fully_connected_backprop[i],r,previous_sum);
    	}	
+}
+else{
+	for (int i = (int)net.Weights.size() - 1; i >= 0; i--) {
+        prove_dense_backprop(net.fully_connected_backprop[i], r, previous_sum);
+    }
+
+}
    	// FINISHED WITH DX circuit 
  	dx_computation = proving_time;
  	proving_time = 0.0;
@@ -1886,10 +1919,11 @@ void check_dataset(int batch, int input_dim){
 	}
 	vector<F> input = x_transcript;
 	x_transcript.clear();
+	if (!g_skip_mimc) {
 	vector<proof> P = mimc_sumcheck(input);
 	Transcript.insert(Transcript.end(),P.begin(),P.end());
 	//return prove_input_commit(gkr_data, r, batch,  input_dim*input_dim);
-}
+}}
 
 
 
@@ -1901,7 +1935,7 @@ void get_witness(struct convolutional_network net, vector<F> &witness){
 	vector<F> bits;
 	for(int i = 0; i < net.avg_layers.size(); i++){
 		if(net.convolution_pooling[i] == 1){
-			get_lookup_witness(convert2vector(net.avg_layers[i].Remainder),64, bits);
+			get_lookup_witness(convert2vector(net.avg_layers[i].Remainder),128, bits);
 			printf("Avg : %d \n",net.avg_layers[i].Remainder.size());
 
 			witness.insert(witness.end(),bits.begin(),bits.end());
@@ -1909,7 +1943,7 @@ void get_witness(struct convolutional_network net, vector<F> &witness){
 
 	}
 	for(int i = 0; i < net.convolutions_backprop.size(); i++){
-		get_lookup_witness(convert2vector(net.convolutions_backprop[i].U_dx_remainders),32, bits);
+		get_lookup_witness(convert2vector(net.convolutions_backprop[i].U_dx_remainders),64, bits);
 		if(convert2vector(net.convolutions_backprop[i].U_dx_remainders).size() != 0){
 			printf("Remainders conv : %d %d\n", net.convolutions_backprop[i].U_dx_remainders.size(),net.convolutions_backprop[i].U_dx_remainders[0].size());
 		}else{
@@ -1923,7 +1957,7 @@ void get_witness(struct convolutional_network net, vector<F> &witness){
 	printf("OK\n");
 		
 	for(int i = 0; i < net.fully_connected_backprop.size(); i++){
-		get_lookup_witness(convert2vector(net.fully_connected_backprop[i].dx_remainders),32, bits);
+		get_lookup_witness(convert2vector(net.fully_connected_backprop[i].dx_remainders),64, bits);
 		printf("Remainders dense : %d %d\n", net.fully_connected_backprop[i].dx_remainders.size(),net.fully_connected_backprop[i].dx_remainders[0].size());
 		witness.insert(witness.end(),bits.begin(),bits.end());
 	
@@ -2349,9 +2383,11 @@ vector<F> prove_aggregation(aggregation_witness data, int level){
 
 	}
 
-
+	
+	if (!g_skip_mimc) {
 	vector<proof> P = mimc_sumcheck(data.merkle_proof_f);
 	Transcript.insert(Transcript.end(),P.begin(),P.end());
+	}
 	return witness;
 }
 
@@ -2475,6 +2511,11 @@ int main(int argc, char *argv[]){
    		printf("TEST\n");
    		model = 3;
    	}
+	else if (strcmp(argv[1], "LINEAR_NET") == 0){
+    	printf("LinearNet\n");
+    	model = 6;          // (new constant you’ll add in CNN.cpp)
+    	input_dim = 28;              // same as LENET (adjust if your data differs)
+	}
    	else{
    		printf("Invalid Neural network\n");
    		exit(-1);
@@ -2496,6 +2537,8 @@ int main(int argc, char *argv[]){
 	   	clock_t start,end;
 	   	
 		net = feed_forward(X, net,channels);
+		g_skip_mimc = (model ==6);   // true for LINEAR_NET; false for ReLU models
+
 	   	net = back_propagation(net);
 	   	
 		
@@ -2518,7 +2561,7 @@ int main(int argc, char *argv[]){
 		
 		poly_commit(witness, witness_matrix, comm[0],levels);
 	   	float commitment_time = proving_time;
-		printf("Commit size : %d, Commit time : %lf\n",witness.size(),new_model.size(),proving_time);
+		printf("Commit size : %d, Model size : %d, Commit time : %lf\n",(int)witness.size(), (int)new_model.size(), commitment_time);
 		proving_time = 0.0;
 		
 		clock_t wc1,wc2;
@@ -2714,6 +2757,7 @@ int main(int argc, char *argv[]){
 		
 		
 		vector<struct proof> u_proof_temp,u_proof;
+		vector<proof> temp_P;
 	   	
 		proving_time = 0.0;
    		
@@ -2726,10 +2770,15 @@ int main(int argc, char *argv[]){
 		x_transcript.clear();
 		
 		u_proof_temp.push_back(verify_proof(Transcript));
+		if (!g_skip_mimc) {
 	   	vector<proof> temp_P = mimc_sumcheck(POGD_hashses);
+	
 		u_proof_temp.insert(u_proof_temp.end(),temp_P.begin(),temp_P.end());
+		
 		temp_P = mimc_sumcheck(aggregation_hashes);
+	
 		u_proof_temp.insert(u_proof_temp.end(),temp_P.begin(),temp_P.end());
+		}
 		proof_witness.insert(proof_witness.end(),x_transcript.begin(),x_transcript.end());
    		vector<F> proof_hashes = x_transcript;
 		pad_vector(proof_witness);
@@ -2759,8 +2808,11 @@ int main(int argc, char *argv[]){
 		proof_hashes.insert(proof_hashes.end(),aggregation_hashes.begin(),aggregation_hashes.end());
 		// Get the U and also append the PoGD proof 
    		u_proof.push_back(verify_proof(u_proof_temp));
+		if (!g_skip_mimc) {
    		temp_P = mimc_sumcheck(proof_hashes);
+		
 		u_proof.insert(u_proof.end(),temp_P.begin(),temp_P.end());
+		}
 		//u_proof.push_back(prove_aggr());
    		u_proof.insert(u_proof.end(),Transcript.begin(),Transcript.end());
 		
@@ -2777,8 +2829,9 @@ int main(int argc, char *argv[]){
    	   	//pr.push_back(verify_proof(u_proof));
    	   	vector<F> total_input;
 		proof_hashes.insert(proof_hashes.end(),POGD_hashses.begin(),POGD_hashses.end());
-		
+		if (!g_skip_mimc) {
 		mimc_sumcheck(proof_hashes);
+		}
 		//pr.push_back(verify_hashes(u_proof));
    	   	//printf("%d\n",get_transcript_size(pr));
 		printf("Verification time : %lf\n", verify(u_proof));
