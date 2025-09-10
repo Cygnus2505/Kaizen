@@ -7,3 +7,5 @@ __pycache__/
 
 # ignore third-party stuff
 /3rd/
+
+src/3rd/
