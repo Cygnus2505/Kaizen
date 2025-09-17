@@ -18,6 +18,7 @@ struct aggregation_witness{
 	vector<vector<F>> output;
 	vector<F> a;
 	int trees,proof_size;  
+	int sha_instances = 0; 
 };
 
 typedef struct aggregation_witness aggregation_witness;

@@ -2130,6 +2130,7 @@ vector<F> shift(vector<F> bits, int shift){
 }
 
 SHA_witness get_sha_witness(vector<F> words){
+	for (auto &w : words) w.img = 0;
 	SHA_witness gkr_input;
 	vector<F> pow(32);pow[0] = F(1);pow[1] = F(2);
 	for(int i = 2; i < 32; i++){
@@ -2171,8 +2172,10 @@ SHA_witness get_sha_witness(vector<F> words){
 			temp_word2 =temp_word2 + pow[j]*(w3[j] + _t - F(2)*w3[j]*_t);
 		}
 		F temp_word = temp_word1 + temp_word2 + words[i - 16] + words[i-7];
+		temp_word.img = 0;
 		quotients.push_back(F(temp_word.toint128()/((unsigned long long)1ULL<<32)));
 		words.push_back(temp_word.toint128()%((unsigned long long)1ULL<<32));
+		words.back().img = 0;
 		buff.push_back(words[i]);
 		if(words[i].toint128() > 1ULL<<32){
 			printf("Error in word %d\n",i);
@@ -2247,7 +2250,7 @@ SHA_witness get_sha_witness(vector<F> words){
 		}
 		F ch = F(0);
 		for(int j = 0; j < 32; j++){
-			ch = ch+ pow[j]*(e_bits[i][j]*f_bits[i][j] + (F(1)-e_bits[i][j])*g_bits[i][i] - F(2)*e_bits[i][j]*f_bits[i][j]* (F(1)-e_bits[i][j])*g_bits[i][i]);
+			ch = ch+ pow[j]*(e_bits[i][j]*f_bits[i][j] + (F(1)-e_bits[i][j])*g_bits[i][j] - F(2)*e_bits[i][j]*f_bits[i][j]* (F(1)-e_bits[i][j])*g_bits[i][j]);
 		}
 		F t1 = ch + s1 + words[i] + h[i] + SHA[i];
 		a_q.push_back((t1+t2).toint128()/(1ULL<<32));
@@ -2327,7 +2330,8 @@ vector<F> prove_aggregation(aggregation_witness data, int level){
 	}
 	gkr_input.insert(gkr_input.end(),pow.begin(),pow.end());
 	vector<F> bits;
-	for(int i = 0; i < data.merkle_proof.size(); i+=2){
+	const int sha_pairs = data.sha_instances; 
+	for(int i = 0; i < 2 * sha_pairs; i+=2){
 		
 		vector<F> words;
 		
@@ -2346,10 +2350,10 @@ vector<F> prove_aggregation(aggregation_witness data, int level){
 	witness = gkr_input;
 	gkr_input.push_back(F(1));
 
-	if(data.merkle_proof.size()/2 != 0){
+	if(data.sha_instances != 0){
 
 		
-		Transcript.push_back(prove_sha256(gkr_input, generate_randomness(10,F(312)),data.merkle_proof.size()/2));
+		Transcript.push_back(prove_sha256(gkr_input, generate_randomness(10,F(312)),data.sha_instances));
 
 		gkr_input.clear();
 		for(int i = 0; i < data.merkle_proof.size(); i++){
@@ -2374,7 +2378,7 @@ vector<F> prove_aggregation(aggregation_witness data, int level){
 		gkr_input.push_back(F_ONE);
 		gkr_input.push_back(F(1ULL<<32));
 
-		Transcript.push_back(prove_merkle_proof_consistency(gkr_input,generate_randomness(10,F(9)),data.merkle_proof.size()/2,level,data.trees));
+		Transcript.push_back(prove_merkle_proof_consistency(gkr_input,generate_randomness(10,F(9)),data.sha_instances,level,data.trees));
 		gkr_input.clear();
 
 		pad_vector(bits);pad_vector(numbers);
@@ -2397,6 +2401,7 @@ vector<F> prove_aggr(vector<vector<vector<vector<F>>>> matrixes,vector<vector<co
 	vector<F> total_witness,temp_w;
 	vector<proof> aggr_proof;
 	vector<F> a = generate_randomness(2,current_randomness);
+	for (auto &ai : a) ai.img = 0;
 	aggregation_witness aggregation_data;
 	for(int i = 0; i < matrixes.size(); i++){
 		// first measure the aggregation time
@@ -2431,6 +2436,7 @@ void test_aggregation(int level, int bitlen){
 	comms.push_back(comm);
 	aggregation_witness aggregation_data;
 	vector<F> a = generate_randomness(2,current_randomness);
+	for (auto &ai : a) ai.img = 0;
 
 	aggregation_data = aggregate(matrixes, comms,  a, level);	
 	//printf("%d,%d\n",aggregation_data.merkle_proof.size()/(3*2),aggregation_data.merkle_proof_f.size()/(3*2));
@@ -2515,6 +2521,12 @@ int main(int argc, char *argv[]){
     	printf("LinearNet\n");
     	model = 6;          // (new constant you’ll add in CNN.cpp)
     	input_dim = 28;              // same as LENET (adjust if your data differs)
+	}
+	else if (strcmp(argv[1], "BASIC1") == 0)
+	{
+    printf("BASIC1\n");
+    input_dim = 3;      // 3x3 input so conv3x3 -> 1x1 output
+    model = 7;          // pick an unused id
 	}
    	else{
    		printf("Invalid Neural network\n");

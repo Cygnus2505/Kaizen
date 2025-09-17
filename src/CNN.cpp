@@ -874,6 +874,31 @@ struct convolutional_network init_network(int selected_model,int batch_size,int 
 		net.Weights = add_dense(net.Weights,2*1024,512);
 		net.Weights = add_dense(net.Weights,512,16);
 	}
+	else if (model == 7) { // BASIC1
+    // One 3x3 conv, 1 output channel, no pooling; then flatten; then 1x1 dense
+    net.Filters = add_filter(net.Filters, /*out*/1, /*in*/channels, /*k*/3);
+    net.convolution_pooling.push_back(3); // 3 == "flatten" in this codebase
+
+    // Rotate filters (same pattern used elsewhere)
+    net.Rotated_Filters.resize(net.Filters.size());
+    for (int i = 0; i < net.Filters.size(); ++i) {
+        net.Rotated_Filters[i].resize(net.Filters[i].size());
+        for (int j = 0; j < net.Filters[i].size(); ++j) {
+            net.Rotated_Filters[i][j].resize(net.Filters[i][j].size());
+            for (int k = 0; k < net.Filters[i][j].size(); ++k) {
+                net.Rotated_Filters[i][j][k] = rotate(net.Filters[i][j][k]);
+            }
+        }
+    }
+
+    // After 3x3 conv on 3x3 input (stride=1, no pad): 1x1x1 feature map
+    net.final_out = 1;
+    net.final_w   = 1;
+
+    // Dense head 1 -> 1 (no ReLU after final dense in this codebase)
+    net.Weights = add_dense(net.Weights, /*in*/1, /*out*/1);
+}
+
 	else{
 		
 		net.Filters = add_filter(net.Filters,32,channels,7); // 56

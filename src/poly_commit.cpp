@@ -16,14 +16,19 @@ extern bool __encode_initialized;
 extern double proving_time;
 vector<F> w;
 
-void field_to_int32(vector<unsigned int> &buff, F num1, F num2){
-    unsigned long long int _num = num1.toint128();
-    buff[0] = _num%(1ULL<<32);
-    buff[1] = _num>>32;
-    _num = num2.toint128();
-    buff[2] = _num%(1ULL<<32);
-    buff[3] = _num>>32;
-    for(int i = 4; i < 8; i++)buff[i] = 0;
+static inline void field_to_int32(std::vector<unsigned int>& out, const F& x, const F& y) {
+    out.resize(8);
+    // Use only the base-limb (real) and ignore the extension limb (img).
+    uint64_t v1 = (uint64_t)x.real;
+    out[0] = (unsigned)(v1 & 0xFFFFFFFFu);
+    out[1] = (unsigned)(v1 >> 32);
+
+    uint64_t v2 = (uint64_t)y.real;
+    out[2] = (unsigned)(v2 & 0xFFFFFFFFu);
+    out[3] = (unsigned)(v2 >> 32);
+
+    // Pad remaining words to 0 for the SHA leaf format used here.
+    for (int i = 4; i < 8; ++i) out[i] = 0;
 }
 
 
@@ -46,14 +51,17 @@ void query(int col, int row,  std::vector<std::vector<F>> &matrix,
         memset(&res, 0, sizeof(__hhash_digest));
         idx.push_back(F(1));
 
-        field_to_int32(integers, matrix[row][offset4],     matrix[row][offset4 + 1]);
+        F x0 = matrix[row][offset4];      x0.img = 0;
+        F y0 = matrix[row][offset4 + 1];  y0.img = 0;
+        field_to_int32(integers, x0, y0);
         _data.merkle_proof.push_back(integers);
-        field_to_int32(integers, matrix[row][offset4 + 2], matrix[row][offset4 + 3]);
+        F x1 = matrix[row][offset4 + 2];  x1.img = 0;
+        F y1 = matrix[row][offset4 + 3];  y1.img = 0;
+        field_to_int32(integers, x1, y1);
         _data.merkle_proof.push_back(integers);
 
         res = merkle_tree::hash_double_field_element_merkle_damgard(
-                matrix[row][offset4],     matrix[row][offset4 + 1],
-                matrix[row][offset4 + 2], matrix[row][offset4 + 3], res);
+        x0, y0, x1, y1, res);
 
         _proof.push_back(res);
         merkle_tree::get_int32(integers, res);
@@ -98,7 +106,7 @@ void query(int col, int row,  std::vector<std::vector<F>> &matrix,
         _data.merkle_proof_f.insert(_data.merkle_proof_f.end(), aux.begin(), aux.end());
 
         // Recompute a fresh F-tree position; DO NOT reuse SHA pos
-        int pos_f = (row * (int)matrix.size() + col) / 2;
+        int pos_f = (row * (int)matrix[0].size() + col) / 2;
         int counter_f = 0;
 
         while (pos_f != 1) {
@@ -439,97 +447,109 @@ void poly_commit(vector<F> poly, vector<vector<F>> &matrix, commitment &comm, in
 }
 
 
-aggregation_witness aggregate(vector<vector<vector<F>>> encoded_matrixes, vector<commitment> mt_arr, vector<F> a, int level){
-    vector<vector<F>> aggr_poly(encoded_matrixes[0].size());
+aggregation_witness aggregate(std::vector<std::vector<std::vector<F>>> encoded_matrixes,
+                              std::vector<commitment> mt_arr,
+                              std::vector<F> a,
+                              int level)
+{
+    // ---- NEW: force base-field randomness for SHA path ----
+    // We make a local copy of 'a' and zero the imaginary limb.
+    // (Safe for both MiMC and SHA; verifier will read the same 'data.a' we publish.)
+    for (auto &ai : a) {
+        ai.img = 0;          // project to base field
+    }
+    // -------------------------------------------------------
+
+    std::vector<std::vector<F>> aggr_poly(encoded_matrixes[0].size());
     aggregation_witness data;
-    
-    int QUERIES;
-    if(PC_scheme == 1){
-        QUERIES = 100;
-    }else{
-        QUERIES = 25;
-    }
-    for(int i =0 ; i < aggr_poly.size(); i++){
-        aggr_poly[i].resize(encoded_matrixes[0][0].size(),F_ZERO);
+
+    int QUERIES = (PC_scheme == 1) ? 100 : 25;
+
+    for (int i = 0; i < (int)aggr_poly.size(); i++) {
+        aggr_poly[i].resize(encoded_matrixes[0][0].size(), F_ZERO);
     }
 
-
-    clock_t begin,end;
+    clock_t begin, end;
     begin = clock();
-    for(int i = 0; i <  encoded_matrixes.size(); i++){
-        for(int j = 0; j < aggr_poly.size(); j++){
-            for(int k = 0; k < aggr_poly[j].size(); k++){
-                aggr_poly[j][k] = a[i]*encoded_matrixes[i][j][k];
+
+    // IMPORTANT: build the linear combination using the base-field 'a'
+    for (int i = 0; i < (int)encoded_matrixes.size(); i++) {
+        for (int j = 0; j < (int)aggr_poly.size(); j++) {
+            for (int k = 0; k < (int)aggr_poly[j].size(); k++) {
+                // If you intended a SUM over witnesses, use +=
+                // (Your original line had '=', which overwrites. Keep '=' if that's deliberate.)
+                aggr_poly[j][k] += a[i] * encoded_matrixes[i][j][k];
             }
         }
     }
-    
+
     int row_size = aggr_poly.size();
-    int col_size = aggr_poly[0].size()/4;
-   
-    
-    if(Commitment_hash == MIMC && level == -1){
+    int col_size = aggr_poly[0].size() / 4;
+    if (Commitment_hash == MIMC && level == -1) {
         col_size = aggr_poly[0].size();
     }
-    vector<vector<int>> pos;
-    vector<int> coord(2);
-    for(int i = 0; i < QUERIES; i++){
-        coord[0] = (unsigned int)rand()%col_size;
-        coord[1] = (unsigned int)rand()%row_size;
+
+    std::vector<std::vector<int>> pos;
+    std::vector<int> coord(2);
+    for (int i = 0; i < QUERIES; i++) {
+        coord[0] = (unsigned int)rand() % col_size;
+        coord[1] = (unsigned int)rand() % row_size;
         pos.push_back(coord);
     }
-    data.proof_size = (int)log2(row_size*col_size);
+    data.proof_size = (int)log2(row_size * col_size);
 
     __hhash_digest *mt;
-
-    vector<vector<vector<unsigned int>>> proofs;
+    std::vector<std::vector<std::vector<unsigned int>>> proofs;
 
     commitment dst;
     end = clock();
-    
-    commit_matrix( aggr_poly,(int)log2(aggr_poly.size())-1,(int)log2(aggr_poly[0].size())-1,dst,  level);
 
-    proving_time += (double)(end-begin)/(double)CLOCKS_PER_SEC;
-   
-    vector<F> root(8);
-    
-    for(int j = 0; j < encoded_matrixes.size(); j++){
-        for(int i = 0; i < QUERIES; i++){
-            query(pos[i][0],pos[i][1],encoded_matrixes[j],mt_arr[j],data);
-            if(i == 0){
-                if(mt_arr[j].hashes_f.size()){
-                    data.root.push_back(mt_arr[j].hashes_f[mt_arr[j].hashes_f.size()-1][0]);
-                }else{
-                    vector<unsigned int> rt(8);
-                    merkle_tree::get_int32(rt,mt_arr[j].hashes_sha[mt_arr[j].hashes_sha.size()-1][0]);
-                    for(int i = 0; i < 8; i++){
-                        root[i] = F(rt[i]);
-                    }
+    commit_matrix(aggr_poly,
+                  (int)log2(aggr_poly.size()) - 1,
+                  (int)log2(aggr_poly[0].size()) - 1,
+                  dst,
+                  level);
+
+    proving_time += (double)(end - begin) / (double)CLOCKS_PER_SEC;
+
+    std::vector<F> root(8);
+
+    for (int j = 0; j < (int)encoded_matrixes.size(); j++) {
+        for (int i = 0; i < QUERIES; i++) {
+            query(pos[i][0], pos[i][1], encoded_matrixes[j], mt_arr[j], data);
+            if (i == 0) {
+                if (mt_arr[j].hashes_f.size()) {
+                    data.root.push_back(mt_arr[j].hashes_f.back()[0]);
+                } else {
+                    std::vector<unsigned int> rt(8);
+                    merkle_tree::get_int32(rt, mt_arr[j].hashes_sha.back()[0]);
+                    for (int t = 0; t < 8; t++) root[t] = F(rt[t]);
                     data.root_sha.push_back(root);
                 }
             }
-        }  
+        }
     }
-    
-    for(int i = 0; i < QUERIES; i++){
-        query(pos[i][0],pos[i][1],aggr_poly,dst,data);
-        if(i == 0){
-            if(dst.hashes_f.size()){
-                data.root.push_back(dst.hashes_f[dst.hashes_f.size()-1][0]);
-            }else{
-                vector<unsigned int> rt(8);
-                merkle_tree::get_int32(rt,dst.hashes_sha[dst.hashes_sha.size()-1][0]);
-                for(int i = 0; i < 8; i++){
-                    root[i] = F(rt[i]);
-                }
-               data.root_sha.push_back(root);
-                
+
+    for (int i = 0; i < QUERIES; i++) {
+        query(pos[i][0], pos[i][1], aggr_poly, dst, data);
+        if (i == 0) {
+            if (dst.hashes_f.size()) {
+                data.root.push_back(dst.hashes_f.back()[0]);
+            } else {
+                std::vector<unsigned int> rt(8);
+                merkle_tree::get_int32(rt, dst.hashes_sha.back()[0]);
+                for (int t = 0; t < 8; t++) root[t] = F(rt[t]);
+                data.root_sha.push_back(root);
             }
         }
     }
-    
-    data.trees = encoded_matrixes.size() +1;
+
+    data.trees = encoded_matrixes.size() + 1;
+
+    // ---- publish the base-field 'a' we actually used ----
     data.a = a;
     data.a.push_back(-F(1));
+    // -----------------------------------------------------
+
     return data;
 }

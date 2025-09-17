@@ -264,6 +264,11 @@ struct proof prove_merkle_proof_consistency(vector<F> data, vector<F> randomness
     in_circuit_dag.clear();
     parse_merkle_proof_consistency(circuit_in,in, instances, proof_size, trees);
     c = DAG_to_layered();
+    size_t gates = 0;
+    for (int i = 0; i < c.size; ++i){
+    gates += c.circuit[i].size;
+    }
+    printf("Cir size : %zu\n", gates);
     
     c.subsetInit();
     prover p(c,input_file,data,false);
@@ -291,6 +296,11 @@ struct proof prove_sha256(vector<F> data, vector<F> randomness,  int instances){
     in_circuit_dag.clear();
     parse_sha256(circuit_in,in,instances);
     c = DAG_to_layered();
+    size_t gates = 0;
+    for (int i = 0; i < c.size; ++i){
+    gates += c.circuit[i].size;
+    }
+    printf("Cir size : %zu\n", gates);
     
     c.subsetInit();
     prover p(c,input_file,data,false);
@@ -317,6 +327,11 @@ struct proof prove_bulletproof_verifier(vector<F> data, vector<F> randomness,int
     in_circuit_dag.clear();
     parse_bulletproof_verifier(circuit_in,in, commitments);
     c = DAG_to_layered();
+    size_t gates = 0;
+    for (int i = 0; i < c.size; ++i){
+    gates += c.circuit[i].size;
+    }
+    printf("Cir size : %zu\n", gates);
     
     c.subsetInit();
     prover p(c,input_file,data,false);
@@ -342,6 +357,11 @@ struct proof prove_division(vector<F> data, vector<F> randomness, int N, int siz
     in_circuit_dag.clear();
     parse_division(N, size);
     c = DAG_to_layered();
+    size_t gates = 0;
+    for (int i = 0; i < c.size; ++i){
+    gates += c.circuit[i].size;
+    }
+    printf("Cir size : %zu\n", gates);
     
     c.subsetInit();
     prover p(c,input_file,data,false);
@@ -369,6 +389,12 @@ struct proof prove_lookup_product(vector<F> data, vector<F> randomness, int N){
     in_circuit_dag.clear();
     parse_lookup_product(N);
     c = DAG_to_layered();
+    size_t gates = 0;
+    for (int i = 0; i < c.size; ++i){
+    gates += c.circuit[i].size;
+    }
+    printf("Cir size : %zu\n", gates);
+
     
     c.subsetInit();
     prover p(c,input_file,data,false);
@@ -396,7 +422,11 @@ struct proof prove_lookup_circuit(vector<F> data, vector<F> randomness, int batc
     in_circuit_dag.clear();
     parse_lookup_table(batch,out);
     c = DAG_to_layered();
-    
+    size_t gates = 0;
+    for (int i = 0; i < c.size; ++i){
+    gates += c.circuit[i].size;
+    }
+    printf("Cir size : %zu\n", gates);
     c.subsetInit();
     prover p(c,input_file,data,false);
 
@@ -424,6 +454,11 @@ struct proof prove_correctness(vector<F> data, vector<F> randomness, int N, int 
     in_circuit_dag.clear();
     parse_check_correctness(N,size);
     c = DAG_to_layered();
+    size_t gates = 0;
+    for (int i = 0; i < c.size; ++i){
+    gates += c.circuit[i].size;
+    }
+    printf("Cir size : %zu\n", gates);
     
     c.subsetInit();
     prover p(c,input_file,data,false);
@@ -452,6 +487,11 @@ struct proof prove_input_commit(vector<F> data, vector<F> randomness, int batch,
     in_circuit_dag.clear();
     parse_input_commit(batch,N);
     c = DAG_to_layered();
+    size_t gates = 0;
+    for (int i = 0; i < c.size; ++i){
+    gates += c.circuit[i].size;
+    }
+    printf("Cir size : %zu\n", gates);
     
     c.subsetInit();
     prover p(c,input_file,data,false);
@@ -479,6 +519,11 @@ struct proof prove_verification(vector<F> data, vector<F> randomness,vector<vect
     in_circuit_dag.clear();
     parse_verification_circuit( transcript);
     c = DAG_to_layered();
+    size_t gates = 0;
+    for (int i = 0; i < c.size; ++i){
+    gates += c.circuit[i].size;
+    }
+    printf("Cir size : %zu\n", gates);
     
     c.subsetInit();
     prover p(c,input_file,data,false);
@@ -507,6 +552,11 @@ struct proof prove_hash_verification(vector<F> data, vector<F> randomness,vector
     in_circuit_dag.clear();
     parse_hash_verification(circuit_in,in, transcript);
     c = DAG_to_layered();
+    size_t gates = 0;
+    for (int i = 0; i < c.size; ++i){
+    gates += c.circuit[i].size;
+    }
+    printf("Cir size : %zu\n", gates);
     
     c.subsetInit();
     prover p(c,input_file,data,false);
@@ -534,6 +584,11 @@ struct proof prove_aggregation(vector<F> data, vector<F> randomness,int commitme
     in_circuit_dag.clear();
     parse_aggregation_new(circuit_in,in, commitments);
     c = DAG_to_layered();
+    size_t gates = 0;
+    for (int i = 0; i < c.size; ++i){
+    gates += c.circuit[i].size;
+    }
+    printf("Cir size : %zu\n", gates);
     
     c.subsetInit();
     prover p(c,input_file,data,false);
@@ -561,6 +616,11 @@ struct proof prove_rescaling(vector<F> data, vector<F> randomness,int N, int cho
     in_circuit_dag.clear();
     parse_rescaling(circuit_in,in, N, chout, w_padded,w);
     c = DAG_to_layered();
+    size_t gates = 0;
+    for (int i = 0; i < c.size; ++i){
+    gates += c.circuit[i].size;
+    }
+    printf("Cir size : %zu\n", gates);
     c.subsetInit();
     prover p(c,input_file,data,false);
 
@@ -589,6 +649,11 @@ struct proof prove_reduce(vector<F> data, vector<F> randomness, int kernels, int
     in_circuit_dag.clear();
     parse_reduce(circuit_in,in, kernels, dw,  kernel_size);
     c = DAG_to_layered();
+    size_t gates = 0;
+    for (int i = 0; i < c.size; ++i){
+    gates += c.circuit[i].size;
+    }
+    printf("Cir size : %zu\n", gates);
     c.subsetInit();
     prover p(c,input_file,data,false);
 
@@ -618,6 +683,11 @@ struct proof prove_padding(vector<F> data, vector<F> randomness,int N, int ch, i
     in_circuit_dag.clear();
     parse_padding(circuit_in,in, N, ch, w,  dim1,dim2,middle);
     c = DAG_to_layered();
+    size_t gates = 0;
+    for (int i = 0; i < c.size; ++i){
+    gates += c.circuit[i].size;
+    }
+    printf("Cir size : %zu\n", gates);
     c.subsetInit();
     prover p(c,input_file,data,false);
 
@@ -646,6 +716,11 @@ struct proof prove_flat_backprop(vector<F> data, vector<F> randomness,int batch,
     in_circuit_dag.clear();
     parse_flat_backprop(circuit_in,in, batch, chout, w,  w_pad);
     c = DAG_to_layered();
+    size_t gates = 0;
+    for (int i = 0; i < c.size; ++i){
+    gates += c.circuit[i].size;
+    }
+    printf("Cir size : %zu\n", gates);
     c.subsetInit();
     prover p(c,input_file,data,false);
 
@@ -673,6 +748,11 @@ struct proof prove_flat(vector<F> data, vector<F> randomness,int batch, int chou
     in_circuit_dag.clear();
     parse_flat(circuit_in,in, batch,  chout, w, w_final);
     c = DAG_to_layered();
+    size_t gates = 0;
+    for (int i = 0; i < c.size; ++i){
+    gates += c.circuit[i].size;
+    }
+    printf("Cir size : %zu\n", gates);
     c.subsetInit();
     prover p(c,input_file,data,false);
 
@@ -701,6 +781,11 @@ struct proof prove_dot_x_prod(vector<F> data, vector<F> randomness,int vector_si
     in_circuit_dag.clear();
     parse_dot_x(circuit_in,in, vector_size, N, ch_in,ch_out);
     c = DAG_to_layered();
+    size_t gates = 0;
+    for (int i = 0; i < c.size; ++i){
+    gates += c.circuit[i].size;
+    }
+    printf("Cir size : %zu\n", gates);
     c.subsetInit();
     prover p(c,input_file,data,false);
 
@@ -729,6 +814,11 @@ struct proof prove_dx_prod(vector<F> data, vector<F> randomness,int vector_size,
     in_circuit_dag.clear();
     parse_dx(circuit_in,in, vector_size, N, ch_in,ch_out);
     c = DAG_to_layered();
+    size_t gates = 0;
+    for (int i = 0; i < c.size; ++i){
+    gates += c.circuit[i].size;
+    }
+    printf("Cir size : %zu\n", gates);
     c.subsetInit();
     prover p(c,input_file,data,false);
 
@@ -757,6 +847,11 @@ struct proof prove_dw_prod(vector<F> data, vector<F> randomness,int vector_size,
     in_circuit_dag.clear();
     parse_dw(circuit_in,in, vector_size, N, ch_in,ch_out);
     c = DAG_to_layered();
+    size_t gates = 0;
+    for (int i = 0; i < c.size; ++i){
+    gates += c.circuit[i].size;
+    }
+    printf("Cir size : %zu\n", gates);
     c.subsetInit();
     prover p(c,input_file,data,false);
 
@@ -769,31 +864,40 @@ struct proof prove_dw_prod(vector<F> data, vector<F> randomness,int vector_size,
     
 }
 
-struct proof prove_relu(vector<F> data, vector<F> randomness,int vector_size){
+struct proof prove_relu(std::vector<F> data,
+                        std::vector<F> randomness,
+                        int vector_size)
+{
     layeredCircuit c;
-    char *input_file,*circuit_name;
-    long long int *in;
-    
 
-    in = (long long int *)malloc(16*sizeof(long long int));
-    for(int i = 0; i < 16; i++){
-        in[i] = i;
-    }
+    // parse_relu needs an index buffer; use RAII instead of malloc
+    std::array<long long, 16> in{};
+    for (int i = 0; i < 16; ++i) in[i] = i;
 
-    ifstream circuit_in;
+    // Determine n robustly (prefer explicit vector_size, else infer from data)
+    const int n = (vector_size > 0) ? vector_size : static_cast<int>(data.size());
+
+    std::ifstream circuit_in;            // required by parse_relu signature
     in_circuit_dag.clear();
-    parse_relu(circuit_in,in, vector_size);
+    parse_relu(circuit_in, in.data(), n);
     c = DAG_to_layered();
+
+    // ---- circuit size print (tagged) ----
+    size_t gates = 0;
+    for (int li = 0; li < c.size; ++li) gates += c.circuit[li].size;
+    printf("Cir size [ReLU, n=%d]: %zu", n, gates);
+    if (n > 0) printf(" (per-act≈%.2f)", double(gates) / double(n));
+    printf("\n");
+    // -------------------------------------
+
     c.subsetInit();
-    prover p(c,input_file,data,false);
 
-    //printf("Prover initialized\n");
+    // Pass a null input_file (don’t use an uninitialized char*)
+    prover p(c, /*input_file*/ nullptr, data, /*is_hash=*/false);
     verifier v(&p, c);
-    ip_circuit_dag.clear();
-    struct proof Pr = v.verify(randomness);
 
-    return Pr;
-    
+    ip_circuit_dag.clear();
+    return v.verify(randomness);
 }
 
 
@@ -813,6 +917,11 @@ struct proof prove_avg_der(vector<F> data, vector<F> randomness,int batch, int c
     in_circuit_dag.clear();
     parse_avg_der(circuit_in,in,batch, chin, w, w_pad,window,mod);
     c = DAG_to_layered();
+    size_t gates = 0;
+    for (int i = 0; i < c.size; ++i){
+    gates += c.circuit[i].size;
+    }
+    printf("Cir size : %zu\n", gates);
     c.subsetInit();
     prover p(c,input_file,data,false);
 
@@ -841,6 +950,11 @@ struct proof prove_avg(vector<F> data, vector<F> randomness,int n_padded, int n,
     in_circuit_dag.clear();
     parse_avg(circuit_in,in, n_padded, n, batch,chout);
     c = DAG_to_layered();
+    size_t gates = 0;
+    for (int i = 0; i < c.size; ++i){
+    gates += c.circuit[i].size;
+    }
+    printf("Cir size : %zu\n", gates);
     c.subsetInit();
     prover p(c,input_file,data,false);
 
@@ -873,6 +987,11 @@ struct proof generate_GKR_proof(char *circuit_name, char *input_file,vector<F> d
     parse(circuit_in,in);
     
     c = DAG_to_layered();
+    size_t gates = 0;
+    for (int i = 0; i < c.size; ++i){
+    gates += c.circuit[i].size;
+    }
+    printf("Cir size : %zu\n", gates);
     //fclose(stdin);
     //F::init();
     c.subsetInit();
